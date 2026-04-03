@@ -1,0 +1,20 @@
+{
+  "name": "Heine-can",
+  "short_name": "Heine-can",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#e6f0e6",
+  "theme_color": "#4c7c4c",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
