@@ -1,12 +1,4 @@
-// --- INITIALISATION & PWA ---
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => { 
-        navigator.serviceWorker.register('./sw.js').catch(err => console.log(err));
-    });
-}
-
-const bottleImg = new Image(); 
-bottleImg.src = 'heinecan_bottle.png';
+const bottleImg = new Image(); bottleImg.src = 'heinecan_bottle.png';
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 let players = [], totalPlayersCount = 0, currentPlayerIndex = 0;
@@ -14,14 +6,12 @@ let bottleAngle = 0, isSpinning = false, designatedPlayerIdx = null;
 let currentTimer, timerVal = 30;
 
 const defaultDatabase = [
-    { text: "Chante un extrait de 'Allumer le feu' pour {X}.", type: "action", interaction: "any" },
-    { text: "Quel est ton plus gros secret vis-à-vis de {X} ?", type: "verite", interaction: "any" },
-    { text: "Fais une demande en mariage ridicule à {XO}.", type: "action", interaction: "opposite_gender" },
-    { text: "Trouve un objet rouge et pose-le sur ta tête.", type: "action", interaction: "none" },
-    { text: "Raconte ta pire honte à {X}.", type: "verite", interaction: "any" }
+    { text: "Chante un extrait de chanson pour {X}.", type: "action" },
+    { text: "Raconte ton secret le plus drôle à {X}.", type: "verite" },
+    { text: "Imite un animal et fais-le deviner à {X}.", type: "action" },
+    { text: "Quelle est ta plus grande peur ?", type: "verite" }
 ];
 
-// --- NAVIGATION ---
 function showSetup() { 
     document.getElementById('home-screen').classList.add('hidden'); 
     document.getElementById('setup-screen').classList.remove('hidden'); 
@@ -31,235 +21,145 @@ async function initPhotoPhase() {
     totalPlayersCount = parseInt(document.getElementById('player-count').value);
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('photo-screen').classList.remove('hidden');
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-        document.getElementById('video').srcObject = stream;
-    } catch(e) { alert("Accès caméra refusé."); }
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    document.getElementById('video').srcObject = stream;
 }
 
 function savePlayer(gender) {
     const video = document.getElementById('video');
-    const canvasPhoto = document.getElementById('photo-canvas');
-    canvasPhoto.width = 200; canvasPhoto.height = 200;
-    canvasPhoto.getContext('2d').drawImage(video, 0, 0, 200, 200);
-    
-    const img = new Image(); 
+    const canvasP = document.getElementById('photo-canvas');
+    canvasP.width = 200; canvasP.height = 200;
+    canvasP.getContext('2d').drawImage(video, 0, 0, 200, 200);
+    const img = new Image();
     img.onload = () => {
-        players.push({ id: currentPlayerIndex, img, gender, active: true, name: `Joueur ${currentPlayerIndex + 1}` });
-        currentPlayerIndex++;
-        if (currentPlayerIndex < totalPlayersCount) {
-            document.getElementById('photo-instruction').innerText = `Joueur ${currentPlayerIndex + 1} : Cadrez-vous`;
+        players.push({ 
+            id: players.length + 1, 
+            img: img, 
+            active: true, 
+            name: `Joueur ${players.length + 1}` 
+        });
+        if (players.length < totalPlayersCount) {
+            document.getElementById('photo-instruction').innerText = `Joueur ${players.length + 1} : Photo`;
         } else {
-            if(video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+            video.srcObject.getTracks().forEach(t => t.stop());
             startGame();
         }
     };
-    img.src = canvasPhoto.toDataURL('image/png');
+    img.src = canvasP.toDataURL('image/png');
 }
 
-// --- MOTEUR DE JEU (CANVAS) ---
 const canvas = document.getElementById('main-canvas');
 const ctx = canvas.getContext('2d');
 
 function startGame() {
     document.getElementById('photo-screen').classList.add('hidden');
     document.getElementById('game-screen').classList.remove('hidden');
-    window.addEventListener('resize', resize); 
-    resize();
-    setTimeout(render, 150); 
+    window.addEventListener('resize', resize); resize();
+    render();
 }
 
-function resize() { 
-    canvas.width = window.innerWidth; 
-    canvas.height = window.innerHeight; 
-    render(); 
-}
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; render(); }
 
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const cx = canvas.width / 2, cy = canvas.height / 2;
     const activeOnes = players.filter(p => p.active);
-    const nb = activeOnes.length;
-    if (nb === 0) return;
+    const slice = (Math.PI * 2) / activeOnes.length;
+    const radius = Math.min(cx, cy) * 0.7;
 
-    const sliceAngle = (Math.PI * 2) / nb;
-    const outerRadius = Math.max(canvas.width, canvas.height);
-    const playerRadius = Math.min(cx, cy) * 0.7;
-
-    // 1. DESSIN DES PARTS DE GATEAU (Le décor)
     activeOnes.forEach((p, i) => {
-        // On décale de -90deg pour que le joueur 1 soit en haut, 
-        // et on retire une demi-part pour que le joueur soit au CENTRE de sa part.
-        const startA = i * sliceAngle - Math.PI / 2 - sliceAngle / 2;
-        const endA = startA + sliceAngle;
+        const angle = i * slice - Math.PI / 2;
+        const x = cx + radius * Math.cos(angle);
+        const y = cy + radius * Math.sin(angle);
 
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, outerRadius, startA, endA);
-        
-        // Alternance de couleurs subtiles
-        if (!isSpinning && designatedPlayerIdx === i) {
-            ctx.fillStyle = "rgba(0, 130, 0, 0.25)"; // Vert plus vif si gagnant
-        } else {
-            ctx.fillStyle = (i % 2 === 0) ? "rgba(0, 255, 0, 0.03)" : "rgba(255, 255, 255, 0.01)";
-        }
+        // Avatar
+        ctx.save();
+        ctx.beginPath(); ctx.arc(x, y, 45, 0, Math.PI*2);
+        ctx.fillStyle = (designatedPlayerIdx === i && !isSpinning) ? "#00ff00" : "#222";
         ctx.fill();
-        
-        // Lignes de séparation
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-    });
-
-    // 2. DESSIN DES AVATARS
-    activeOnes.forEach((p, i) => {
-        const angle = i * sliceAngle - Math.PI / 2;
-        const x = cx + playerRadius * Math.cos(angle);
-        const y = cy + playerRadius * Math.sin(angle);
-        
-        if (!isSpinning && designatedPlayerIdx === i) {
-            ctx.shadowBlur = 30; ctx.shadowColor = "#008200";
-            ctx.strokeStyle = "#008200"; ctx.lineWidth = 6;
-            ctx.beginPath(); ctx.arc(x, y, 48, 0, Math.PI * 2); ctx.stroke();
-            ctx.shadowBlur = 0;
-        }
-        
-        ctx.save(); 
-        ctx.beginPath(); 
-        ctx.arc(x, y, 40, 0, Math.PI * 2); 
-        ctx.clip();
-        if (p.img.complete) ctx.drawImage(p.img, x - 40, y - 40, 80, 80);
+        ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI*2); ctx.clip();
+        ctx.drawImage(p.img, x-40, y-40, 80, 80);
         ctx.restore();
+
+        // Badge Numéro
+        ctx.fillStyle = "var(--green)";
+        ctx.beginPath(); ctx.arc(x + 30, y - 30, 15, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "white"; ctx.font = "bold 16px Arial"; ctx.textAlign = "center";
+        ctx.fillText(p.id, x + 30, y - 25);
     });
 
-    // 3. DESSIN BOUTEILLE
-    ctx.save(); 
-    ctx.translate(cx, cy); 
-    ctx.rotate(bottleAngle);
-    const bH = canvas.height * 0.42; 
-    const bW = bH * (bottleImg.width / bottleImg.height);
-    ctx.drawImage(bottleImg, -bW/2, -bH/2, bW, bH); 
-    ctx.restore();
+    // Bouteille
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(bottleAngle);
+    const bH = canvas.height * 0.4; const bW = bH * (bottleImg.width / bottleImg.height);
+    ctx.drawImage(bottleImg, -bW/2, -bH/2, bW, bH); ctx.restore();
 }
 
-// --- LOGIQUE DE ROTATION (ALÉATOIRE RÉEL) ---
+// PHYSIQUE NATURELLE : Friction + Inertie
 canvas.onclick = () => {
     if (isSpinning || !document.getElementById('choice-overlay').classList.contains('hidden')) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    
     isSpinning = true;
-    designatedPlayerIdx = null; // Reset le gagnant visuel
-    
-    const activeOnes = players.filter(p => p.active);
-    const nbPlayers = activeOnes.length;
+    designatedPlayerIdx = null;
 
-    // On définit une force de lancer aléatoire
-    const duration = 4000 + Math.random() * 2500;
-    const nbTours = 4 + Math.floor(Math.random() * 6);
-    const forceAleatoire = Math.random() * (Math.PI * 2);
-    const targetAngle = (nbTours * Math.PI * 2) + forceAleatoire;
-    const startAngle = bottleAngle % (Math.PI * 2);
+    let velocity = 0.25 + Math.random() * 0.25;
+    const friction = 0.982;
 
-    let startTime = null;
-
-    function animate(currentTime) {
-        if (!startTime) startTime = currentTime;
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Courbe de freinage naturelle
-        const easeOut = 1 - Math.pow(1 - progress, 4);
-        
-        bottleAngle = startAngle + (targetAngle - startAngle) * easeOut;
+    const spin = () => {
+        bottleAngle += velocity;
+        velocity *= friction;
         render();
 
-        if (progress < 1) {
-            requestAnimationFrame(animate);
+        if (velocity > 0.0015) {
+            requestAnimationFrame(spin);
         } else {
             isSpinning = false;
-            bottleAngle = bottleAngle % (Math.PI * 2);
-            
-            // DÉTERMINATION DU GAGNANT PAR LA ZONE
-            const slice = (Math.PI * 2) / nbPlayers;
-            // On ajuste l'angle pour correspondre aux parts dessinées
-            let normalizedAngle = (bottleAngle + Math.PI/2 + slice/2) % (Math.PI * 2);
-            if (normalizedAngle < 0) normalizedAngle += Math.PI * 2;
-            
-            designatedPlayerIdx = Math.floor(normalizedAngle / slice) % nbPlayers;
-            
+            const activeOnes = players.filter(p => p.active);
+            const slice = (Math.PI * 2) / activeOnes.length;
+            let norm = (bottleAngle + Math.PI/2) % (Math.PI * 2);
+            if (norm < 0) norm += Math.PI * 2;
+            designatedPlayerIdx = Math.floor(norm / slice) % activeOnes.length;
             render();
-            setTimeout(showChoiceMenu, 600);
+            setTimeout(() => { document.getElementById('choice-overlay').classList.remove('hidden'); }, 500);
         }
-    }
-    requestAnimationFrame(animate);
+    };
+    spin();
 };
 
-function showChoiceMenu() {
-    const activeOnes = players.filter(p => p.active);
-    document.getElementById('designated-name').innerText = activeOnes[designatedPlayerIdx].name;
-    document.getElementById('choice-overlay').classList.remove('hidden');
-}
-
-// --- LOGIQUE DES TÂCHES ---
 function pickTask(type) {
-    const activeOnes = players.filter(p => p.active);
-    const me = activeOnes[designatedPlayerIdx];
-    const custom = JSON.parse(localStorage.getItem('heinecan_custom')) || [];
-    const pool = [...defaultDatabase, ...custom].filter(t => t.type === type);
+    const p = players.filter(p => p.active)[designatedPlayerIdx];
+    document.getElementById('active-player-reminder').src = p.img.src;
+    document.getElementById('active-player-number').innerText = p.id;
+
+    const tasks = defaultDatabase.filter(t => t.type === type);
+    let text = tasks[Math.floor(Math.random()*tasks.length)].text;
     
-    let task = pool[Math.floor(Math.random() * pool.length)];
-    let text = task.text;
-
-    // Sécurité si seul
-    const others = activeOnes.filter(p => p.id !== me.id);
-    const targetName = others.length > 0 ? others[Math.floor(Math.random()*others.length)].name : "ton voisin";
-
-    if (text.includes("{X}")) text = text.replace("{X}", targetName);
-    if (text.includes("{XO}")) {
-        const opposites = others.filter(p => p.gender !== me.gender);
-        text = text.replace("{XO}", opposites.length > 0 ? opposites[Math.floor(Math.random()*opposites.length)].name : targetName);
-    }
+    // Remplacement intelligent du nom
+    const others = players.filter(pl => pl.active && pl.id !== p.id);
+    const target = others.length > 0 ? others[Math.floor(Math.random()*others.length)].name : "ton voisin";
+    text = text.replace("{X}", target);
 
     document.getElementById('task-text').innerText = text;
     document.getElementById('choice-overlay').classList.add('hidden');
     document.getElementById('task-overlay').classList.remove('hidden');
-    startTimer();
-}
-
-function startTimer() {
-    timerVal = 30; document.getElementById('timer-display').innerText = timerVal;
+    
+    timerVal = 30;
+    document.getElementById('timer-display').innerText = timerVal;
     document.getElementById('verdict-buttons').classList.add('hidden');
+    
     currentTimer = setInterval(() => {
-        timerVal--; document.getElementById('timer-display').innerText = timerVal;
-        if (timerVal <= 0) { clearInterval(currentTimer); document.getElementById('verdict-buttons').classList.remove('hidden'); }
+        timerVal--;
+        document.getElementById('timer-display').innerText = timerVal;
+        if(timerVal <= 0) {
+            clearInterval(currentTimer);
+            document.getElementById('verdict-buttons').classList.remove('hidden');
+        }
     }, 1000);
 }
 
 function endTurn(success) {
-    document.getElementById('task-overlay').classList.add('hidden');
     if (!success) {
-        const activeOnes = players.filter(p => p.active);
-        activeOnes[designatedPlayerIdx].active = false;
-        if (players.filter(p => p.active).length < 2) { 
-            alert("Fin de partie ! Le dernier Heinecan l'emporte."); 
-            location.reload(); 
-        }
+        players.filter(p => p.active)[designatedPlayerIdx].active = false;
+        if (players.filter(p => p.active).length < 2) { alert("Fin de partie !"); location.reload(); }
     }
-    designatedPlayerIdx = null; 
-    render();
-}
-
-function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
-function addNewTask() {
-    const text = document.getElementById('custom-text').value;
-    if (!text) return;
-    const tasks = JSON.parse(localStorage.getItem('heinecan_custom')) || [];
-    tasks.push({ 
-        text, 
-        type: document.getElementById('custom-type').value, 
-        interaction: document.getElementById('custom-interaction').value 
-    });
-    localStorage.setItem('heinecan_custom', JSON.stringify(tasks));
-    document.getElementById('custom-text').value = ""; 
-    toggleSettings();
+    document.getElementById('task-overlay').classList.add('hidden');
+    designatedPlayerIdx = null; render();
 }
