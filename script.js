@@ -18,7 +18,7 @@ const defaultDatabase = [
     { text: "Quel est ton plus gros secret vis-à-vis de {X} ?", type: "verite", interaction: "any" },
     { text: "Fais une demande en mariage ridicule à {XO}.", type: "action", interaction: "opposite_gender" },
     { text: "Trouve un objet rouge et pose-le sur ta tête.", type: "action", interaction: "none" },
-    { text: "Raconte ton dernier rêve étrange à {X}.", type: "verite", interaction: "any" }
+    { text: "Raconte ta pire honte à {X}.", type: "verite", interaction: "any" }
 ];
 
 // --- NAVIGATION ---
@@ -42,15 +42,19 @@ function savePlayer(gender) {
     const canvasPhoto = document.getElementById('photo-canvas');
     canvasPhoto.width = 200; canvasPhoto.height = 200;
     canvasPhoto.getContext('2d').drawImage(video, 0, 0, 200, 200);
-    const img = new Image(); img.src = canvasPhoto.toDataURL('image/png');
-    players.push({ id: currentPlayerIndex, img, gender, active: true, name: `Joueur ${currentPlayerIndex + 1}` });
-    currentPlayerIndex++;
-    if (currentPlayerIndex < totalPlayersCount) {
-        document.getElementById('photo-instruction').innerText = `Joueur ${currentPlayerIndex + 1} : Cadrez-vous`;
-    } else {
-        if(video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-        startGame();
-    }
+    
+    const img = new Image(); 
+    img.onload = () => {
+        players.push({ id: currentPlayerIndex, img, gender, active: true, name: `Joueur ${currentPlayerIndex + 1}` });
+        currentPlayerIndex++;
+        if (currentPlayerIndex < totalPlayersCount) {
+            document.getElementById('photo-instruction').innerText = `Joueur ${currentPlayerIndex + 1} : Cadrez-vous`;
+        } else {
+            if(video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+            startGame();
+        }
+    };
+    img.src = canvasPhoto.toDataURL('image/png');
 }
 
 // --- MOTEUR DE JEU (CANVAS) ---
@@ -62,7 +66,7 @@ function startGame() {
     document.getElementById('game-screen').classList.remove('hidden');
     window.addEventListener('resize', resize); 
     resize();
-    render();
+    setTimeout(render, 150); 
 }
 
 function resize() { 
@@ -75,12 +79,43 @@ function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const cx = canvas.width / 2, cy = canvas.height / 2;
     const activeOnes = players.filter(p => p.active);
-    const radius = Math.min(cx, cy) * 0.7;
+    const nb = activeOnes.length;
+    if (nb === 0) return;
 
+    const sliceAngle = (Math.PI * 2) / nb;
+    const outerRadius = Math.max(canvas.width, canvas.height);
+    const playerRadius = Math.min(cx, cy) * 0.7;
+
+    // 1. DESSIN DES PARTS DE GATEAU (Le décor)
     activeOnes.forEach((p, i) => {
-        const angle = i * ((Math.PI * 2) / activeOnes.length);
-        const x = cx + radius * Math.cos(angle - Math.PI / 2);
-        const y = cy + radius * Math.sin(angle - Math.PI / 2);
+        // On décale de -90deg pour que le joueur 1 soit en haut, 
+        // et on retire une demi-part pour que le joueur soit au CENTRE de sa part.
+        const startA = i * sliceAngle - Math.PI / 2 - sliceAngle / 2;
+        const endA = startA + sliceAngle;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, outerRadius, startA, endA);
+        
+        // Alternance de couleurs subtiles
+        if (!isSpinning && designatedPlayerIdx === i) {
+            ctx.fillStyle = "rgba(0, 130, 0, 0.25)"; // Vert plus vif si gagnant
+        } else {
+            ctx.fillStyle = (i % 2 === 0) ? "rgba(0, 255, 0, 0.03)" : "rgba(255, 255, 255, 0.01)";
+        }
+        ctx.fill();
+        
+        // Lignes de séparation
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    });
+
+    // 2. DESSIN DES AVATARS
+    activeOnes.forEach((p, i) => {
+        const angle = i * sliceAngle - Math.PI / 2;
+        const x = cx + playerRadius * Math.cos(angle);
+        const y = cy + playerRadius * Math.sin(angle);
         
         if (!isSpinning && designatedPlayerIdx === i) {
             ctx.shadowBlur = 30; ctx.shadowColor = "#008200";
@@ -88,32 +123,41 @@ function render() {
             ctx.beginPath(); ctx.arc(x, y, 48, 0, Math.PI * 2); ctx.stroke();
             ctx.shadowBlur = 0;
         }
-        ctx.save(); ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.clip();
-        ctx.drawImage(p.img, x - 40, y - 40, 80, 80); ctx.restore();
+        
+        ctx.save(); 
+        ctx.beginPath(); 
+        ctx.arc(x, y, 40, 0, Math.PI * 2); 
+        ctx.clip();
+        if (p.img.complete) ctx.drawImage(p.img, x - 40, y - 40, 80, 80);
+        ctx.restore();
     });
 
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(bottleAngle);
-    const bH = canvas.height * 0.45; const bW = bH * (bottleImg.width / bottleImg.height);
-    ctx.drawImage(bottleImg, -bW/2, -bH/2, bW, bH); ctx.restore();
+    // 3. DESSIN BOUTEILLE
+    ctx.save(); 
+    ctx.translate(cx, cy); 
+    ctx.rotate(bottleAngle);
+    const bH = canvas.height * 0.42; 
+    const bW = bH * (bottleImg.width / bottleImg.height);
+    ctx.drawImage(bottleImg, -bW/2, -bH/2, bW, bH); 
+    ctx.restore();
 }
 
-// --- ROTATION ORGANIQUE (SENSATION RÉELLE) ---
+// --- LOGIQUE DE ROTATION (ALÉATOIRE RÉEL) ---
 canvas.onclick = () => {
     if (isSpinning || !document.getElementById('choice-overlay').classList.contains('hidden')) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
     
     isSpinning = true;
+    designatedPlayerIdx = null; // Reset le gagnant visuel
+    
     const activeOnes = players.filter(p => p.active);
     const nbPlayers = activeOnes.length;
-    const sliceAngle = (Math.PI * 2) / nbPlayers;
 
-    // Prédire le gagnant
-    designatedPlayerIdx = Math.floor(Math.random() * nbPlayers);
-
-    // Paramètres de sensation
-    const duration = 5000 + (Math.random() * 800); 
-    const nbTours = 6 + Math.floor(Math.random() * 3); 
-    const targetAngle = (nbTours * Math.PI * 2) + (designatedPlayerIdx * sliceAngle);
+    // On définit une force de lancer aléatoire
+    const duration = 4000 + Math.random() * 2500;
+    const nbTours = 4 + Math.floor(Math.random() * 6);
+    const forceAleatoire = Math.random() * (Math.PI * 2);
+    const targetAngle = (nbTours * Math.PI * 2) + forceAleatoire;
     const startAngle = bottleAngle % (Math.PI * 2);
 
     let startTime = null;
@@ -122,27 +166,29 @@ canvas.onclick = () => {
         if (!startTime) startTime = currentTime;
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-
-        // FORMULE EXPO : Grosse impulsion, puis agonie lente
-        const easeOut = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
         
-        // MICRO-VIBRATION : Simule le frottement de la bouteille sur le sol
-        const jitter = (1 - progress) * (Math.sin(elapsed * 0.08) * 0.0015);
+        // Courbe de freinage naturelle
+        const easeOut = 1 - Math.pow(1 - progress, 4);
         
-        bottleAngle = startAngle + (targetAngle - startAngle) * easeOut + jitter;
-
+        bottleAngle = startAngle + (targetAngle - startAngle) * easeOut;
         render();
 
         if (progress < 1) {
             requestAnimationFrame(animate);
         } else {
-            // Temps de pause pour valider l'arrêt visuel
-            setTimeout(() => {
-                isSpinning = false;
-                bottleAngle = targetAngle % (Math.PI * 2);
-                render();
-                showChoiceMenu();
-            }, 200);
+            isSpinning = false;
+            bottleAngle = bottleAngle % (Math.PI * 2);
+            
+            // DÉTERMINATION DU GAGNANT PAR LA ZONE
+            const slice = (Math.PI * 2) / nbPlayers;
+            // On ajuste l'angle pour correspondre aux parts dessinées
+            let normalizedAngle = (bottleAngle + Math.PI/2 + slice/2) % (Math.PI * 2);
+            if (normalizedAngle < 0) normalizedAngle += Math.PI * 2;
+            
+            designatedPlayerIdx = Math.floor(normalizedAngle / slice) % nbPlayers;
+            
+            render();
+            setTimeout(showChoiceMenu, 600);
         }
     }
     requestAnimationFrame(animate);
@@ -154,23 +200,26 @@ function showChoiceMenu() {
     document.getElementById('choice-overlay').classList.remove('hidden');
 }
 
-// --- TÂCHES & TIMER ---
+// --- LOGIQUE DES TÂCHES ---
 function pickTask(type) {
     const activeOnes = players.filter(p => p.active);
     const me = activeOnes[designatedPlayerIdx];
     const custom = JSON.parse(localStorage.getItem('heinecan_custom')) || [];
     const pool = [...defaultDatabase, ...custom].filter(t => t.type === type);
+    
     let task = pool[Math.floor(Math.random() * pool.length)];
     let text = task.text;
 
-    if (text.includes("{X}")) {
-        const others = activeOnes.filter(p => p.id !== me.id);
-        text = text.replace("{X}", others.length > 0 ? others[Math.floor(Math.random()*others.length)].name : "ton voisin");
-    }
+    // Sécurité si seul
+    const others = activeOnes.filter(p => p.id !== me.id);
+    const targetName = others.length > 0 ? others[Math.floor(Math.random()*others.length)].name : "ton voisin";
+
+    if (text.includes("{X}")) text = text.replace("{X}", targetName);
     if (text.includes("{XO}")) {
-        const opposites = activeOnes.filter(p => p.id !== me.id && p.gender !== me.gender);
-        text = text.replace("{XO}", opposites.length > 0 ? opposites[Math.floor(Math.random()*opposites.length)].name : "ton voisin");
+        const opposites = others.filter(p => p.gender !== me.gender);
+        text = text.replace("{XO}", opposites.length > 0 ? opposites[Math.floor(Math.random()*opposites.length)].name : targetName);
     }
+
     document.getElementById('task-text').innerText = text;
     document.getElementById('choice-overlay').classList.add('hidden');
     document.getElementById('task-overlay').classList.remove('hidden');
@@ -191,9 +240,13 @@ function endTurn(success) {
     if (!success) {
         const activeOnes = players.filter(p => p.active);
         activeOnes[designatedPlayerIdx].active = false;
-        if (players.filter(p => p.active).length < 2) { alert("Partie terminée !"); location.reload(); }
+        if (players.filter(p => p.active).length < 2) { 
+            alert("Fin de partie ! Le dernier Heinecan l'emporte."); 
+            location.reload(); 
+        }
     }
-    designatedPlayerIdx = null; render();
+    designatedPlayerIdx = null; 
+    render();
 }
 
 function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
@@ -201,7 +254,12 @@ function addNewTask() {
     const text = document.getElementById('custom-text').value;
     if (!text) return;
     const tasks = JSON.parse(localStorage.getItem('heinecan_custom')) || [];
-    tasks.push({ text, type: document.getElementById('custom-type').value, interaction: document.getElementById('custom-interaction').value });
+    tasks.push({ 
+        text, 
+        type: document.getElementById('custom-type').value, 
+        interaction: document.getElementById('custom-interaction').value 
+    });
     localStorage.setItem('heinecan_custom', JSON.stringify(tasks));
-    document.getElementById('custom-text').value = ""; toggleSettings();
+    document.getElementById('custom-text').value = ""; 
+    toggleSettings();
 }
