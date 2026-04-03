@@ -1,39 +1,55 @@
 // --- INITIALISATION & PWA ---
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js'); });
+    window.addEventListener('load', () => { 
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('Heinecan PWA Ready'))
+            .catch(err => console.log('SW Error:', err));
+    });
 }
 
-const bottleImg = new Image(); bottleImg.src = 'heinecan_bottle.png';
+const bottleImg = new Image(); 
+bottleImg.src = 'heinecan_bottle.png';
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 let players = [], totalPlayersCount = 0, currentPlayerIndex = 0;
 let bottleAngle = 0, isSpinning = false, designatedPlayerIdx = null;
 let currentTimer, timerVal = 30;
 
+// Base de données par défaut (Gages & Vérités)
 const defaultDatabase = [
     { text: "Chante un extrait de 'Allumer le feu' pour {X}.", type: "action", interaction: "any" },
     { text: "Quel est ton plus gros secret vis-à-vis de {X} ?", type: "verite", interaction: "any" },
     { text: "Fais une demande en mariage ridicule à {XO}.", type: "action", interaction: "opposite_gender" },
-    { text: "Trouve un objet rouge et pose-le sur ta tête.", type: "action", interaction: "none" }
+    { text: "Trouve un objet rouge et pose-le sur ta tête.", type: "action", interaction: "none" },
+    { text: "Raconte ta pire honte devant {X}.", type: "verite", interaction: "any" },
+    { text: "Imite le cri d'un animal choisi par {XO}.", type: "action", interaction: "opposite_gender" }
 ];
 
-// --- NAVIGATION ---
-function showSetup() { document.getElementById('home-screen').style.display='none'; document.getElementById('setup-screen').classList.remove('hidden'); }
+// --- NAVIGATION & SETUP ---
+function showSetup() { 
+    document.getElementById('home-screen').classList.add('hidden'); 
+    document.getElementById('setup-screen').classList.remove('hidden'); 
+}
 
 async function initPhotoPhase() {
     totalPlayersCount = parseInt(document.getElementById('player-count').value);
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('photo-screen').classList.remove('hidden');
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-    document.getElementById('video').srcObject = stream;
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        document.getElementById('video').srcObject = stream;
+    } catch (err) {
+        alert("Caméra non accessible. Vérifiez les autorisations.");
+    }
 }
 
 function savePlayer(gender) {
     const video = document.getElementById('video');
-    const canvas = document.getElementById('photo-canvas');
-    canvas.width = 200; canvas.height = 200;
-    canvas.getContext('2d').drawImage(video, 0, 0, 200, 200);
-    const img = new Image(); img.src = canvas.toDataURL('image/png');
+    const canvasPhoto = document.getElementById('photo-canvas');
+    canvasPhoto.width = 200; canvasPhoto.height = 200;
+    canvasPhoto.getContext('2d').drawImage(video, 0, 0, 200, 200);
+    const img = new Image(); 
+    img.src = canvasPhoto.toDataURL('image/png');
     
     players.push({ id: currentPlayerIndex, img, gender, active: true, name: `Joueur ${currentPlayerIndex + 1}` });
     currentPlayerIndex++;
@@ -41,23 +57,28 @@ function savePlayer(gender) {
     if (currentPlayerIndex < totalPlayersCount) {
         document.getElementById('photo-instruction').innerText = `Joueur ${currentPlayerIndex + 1} : Cadrez-vous`;
     } else {
-        video.srcObject.getTracks().forEach(t => t.stop());
+        if(video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
         startGame();
     }
 }
 
-// --- JEU & CANVAS ---
+// --- MOTEUR DE JEU (CANVAS) ---
 const canvas = document.getElementById('main-canvas');
 const ctx = canvas.getContext('2d');
 
 function startGame() {
     document.getElementById('photo-screen').classList.add('hidden');
     document.getElementById('game-screen').classList.remove('hidden');
-    window.addEventListener('resize', resize); resize();
+    window.addEventListener('resize', resize); 
+    resize();
     render();
 }
 
-function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; render(); }
+function resize() { 
+    canvas.width = window.innerWidth; 
+    canvas.height = window.innerHeight; 
+    render(); 
+}
 
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -66,15 +87,16 @@ function render() {
     const radius = Math.min(cx, cy) * 0.7;
 
     activeOnes.forEach((p, i) => {
-        const angle = (i / activeOnes.length) * Math.PI * 2 - Math.PI / 2;
-        const x = cx + radius * Math.cos(angle);
-        const y = cy + radius * Math.sin(angle);
+        // Calcul de l'angle pour placer les joueurs en cercle
+        const angle = (i / activeOnes.length) * Math.PI * 2;
+        const x = cx + radius * Math.cos(angle - Math.PI / 2);
+        const y = cy + radius * Math.sin(angle - Math.PI / 2);
         
-        // Aura si sélectionné
+        // Aura de sélection si la bouteille s'arrête sur lui
         if (!isSpinning && designatedPlayerIdx === i) {
-            ctx.shadowBlur = 20; ctx.shadowColor = "#008200";
-            ctx.strokeStyle = "#008200"; ctx.lineWidth = 5;
-            ctx.beginPath(); ctx.arc(x, y, 45, 0, Math.PI * 2); ctx.stroke();
+            ctx.shadowBlur = 25; ctx.shadowColor = "#008200";
+            ctx.strokeStyle = "#008200"; ctx.lineWidth = 6;
+            ctx.beginPath(); ctx.arc(x, y, 48, 0, Math.PI * 2); ctx.stroke();
             ctx.shadowBlur = 0;
         }
 
@@ -82,47 +104,61 @@ function render() {
         ctx.drawImage(p.img, x - 40, y - 40, 80, 80); ctx.restore();
     });
 
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(bottleAngle);
-    const bH = canvas.height * 0.4; const bW = bH * (bottleImg.width / bottleImg.height);
-    ctx.drawImage(bottleImg, -bW/2, -bH/2, bW, bH); ctx.restore();
+    // Dessin de la bouteille
+    ctx.save(); 
+    ctx.translate(cx, cy); 
+    ctx.rotate(bottleAngle);
+    const bH = canvas.height * 0.45; 
+    const bW = bH * (bottleImg.width / bottleImg.height);
+    ctx.drawImage(bottleImg, -bW/2, -bH/2, bW, bH); 
+    ctx.restore();
 }
 
-// --- CLIC & ROTATION AIMANTÉE ---
+// --- ROTATION PRÉDICTIVE (ZÉRO SNAP) ---
 canvas.onclick = () => {
     if (isSpinning || !document.getElementById('choice-overlay').classList.contains('hidden')) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
+    
     isSpinning = true;
-    let velocity = Math.random() * 0.25 + 0.25;
-    const friction = 0.985;
+    const activeOnes = players.filter(p => p.active);
+    const nbPlayers = activeOnes.length;
+    const sliceAngle = (Math.PI * 2) / nbPlayers;
 
-    const spin = () => {
-        bottleAngle += velocity; velocity *= friction;
+    // 1. PRÉDICTION : On définit le gagnant mathématiquement dès le départ
+    designatedPlayerIdx = Math.floor(Math.random() * nbPlayers);
+
+    // 2. CALCUL DE L'ANGLE CIBLE
+    const toursAleatoires = Math.floor(Math.random() * 3) + 5; // 5 à 7 tours complets
+    const targetAngle = (toursAleatoires * Math.PI * 2) + (designatedPlayerIdx * sliceAngle);
+
+    // 3. ANIMATION PAR INTERPOLATION FLUIDE (Ease-Out)
+    let startAngle = bottleAngle % (Math.PI * 2);
+    let startTime = null;
+    const duration = 4500; // 4.5 secondes de rotation pour le suspense
+
+    function animate(currentTime) {
+        if (!startTime) startTime = currentTime;
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Formule Cubic Ease-Out : Décélération parfaite sans retour arrière
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        
+        bottleAngle = startAngle + (targetAngle - startAngle) * easeOut;
+
         render();
-        if (velocity > 0.015) { requestAnimationFrame(spin); } 
-        else {
-            const activeOnes = players.filter(p => p.active);
-            const slice = (Math.PI * 2) / activeOnes.length;
-            let currentModulo = (bottleAngle + Math.PI/2) % (Math.PI * 2);
-            if (currentModulo < 0) currentModulo += Math.PI * 2;
-            designatedPlayerIdx = Math.round(currentModulo / slice) % activeOnes.length;
-            snapToTarget(designatedPlayerIdx * slice - Math.PI/2);
-        }
-    };
-    requestAnimationFrame(spin);
-};
 
-function snapToTarget(target) {
-    let diff = target - (bottleAngle % (Math.PI * 2));
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    let step = 0;
-    const anim = () => {
-        step += 0.05; bottleAngle += diff * 0.1; render();
-        if (step < 1) requestAnimationFrame(anim);
-        else { isSpinning = false; showChoiceMenu(); }
-    };
-    anim();
-}
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            isSpinning = false;
+            // On garde un angle propre pour la prochaine rotation
+            bottleAngle = bottleAngle % (Math.PI * 2);
+            showChoiceMenu();
+        }
+    }
+    requestAnimationFrame(animate);
+};
 
 function showChoiceMenu() {
     const activeOnes = players.filter(p => p.active);
@@ -130,14 +166,17 @@ function showChoiceMenu() {
     document.getElementById('choice-overlay').classList.remove('hidden');
 }
 
-// --- LOGIQUE DES TACHES ---
+// --- LOGIQUE DES TÂCHES ---
 function pickTask(type) {
     const activeOnes = players.filter(p => p.active);
     const me = activeOnes[designatedPlayerIdx];
-    const pool = [...defaultDatabase, ...(JSON.parse(localStorage.getItem('heinecan_custom')) || [])].filter(t => t.type === type);
+    const custom = JSON.parse(localStorage.getItem('heinecan_custom')) || [];
+    const pool = [...defaultDatabase, ...custom].filter(t => t.type === type);
+    
     let task = pool[Math.floor(Math.random() * pool.length)];
     let text = task.text;
 
+    // Remplacement des tags dynamiques {X} et {XO}
     if (text.includes("{X}")) {
         const others = activeOnes.filter(p => p.id !== me.id);
         text = text.replace("{X}", others.length > 0 ? others[Math.floor(Math.random()*others.length)].name : "ton voisin");
@@ -154,31 +193,46 @@ function pickTask(type) {
 }
 
 function startTimer() {
-    timerVal = 30; document.getElementById('timer-display').innerText = timerVal;
+    timerVal = 30; 
+    document.getElementById('timer-display').innerText = timerVal;
     document.getElementById('verdict-buttons').classList.add('hidden');
+    
     currentTimer = setInterval(() => {
-        timerVal--; document.getElementById('timer-display').innerText = timerVal;
-        if (timerVal <= 0) { clearInterval(currentTimer); document.getElementById('verdict-buttons').classList.remove('hidden'); }
+        timerVal--; 
+        document.getElementById('timer-display').innerText = timerVal;
+        if (timerVal <= 0) { 
+            clearInterval(currentTimer); 
+            document.getElementById('verdict-buttons').classList.remove('hidden'); 
+        }
     }, 1000);
 }
 
 function endTurn(success) {
     document.getElementById('task-overlay').classList.add('hidden');
     if (!success) {
-        players.filter(p => p.active)[designatedPlayerIdx].active = false;
-        if (players.filter(p => p.active).length < 2) { alert("Fin de partie !"); location.reload(); }
+        const activeOnes = players.filter(p => p.active);
+        activeOnes[designatedPlayerIdx].active = false;
+        if (players.filter(p => p.active).length < 2) { 
+            alert("Fin de partie ! Seul un survivant demeure."); 
+            location.reload(); 
+        }
     }
-    designatedPlayerIdx = null; render();
+    render();
 }
 
+// --- ÉDITEUR DE GAGES ---
 function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
+
 function addNewTask() {
     const text = document.getElementById('custom-text').value;
     const type = document.getElementById('custom-type').value;
     const interaction = document.getElementById('custom-interaction').value;
     if (!text) return;
+
     const tasks = JSON.parse(localStorage.getItem('heinecan_custom')) || [];
     tasks.push({ text, type, interaction });
     localStorage.setItem('heinecan_custom', JSON.stringify(tasks));
-    document.getElementById('custom-text').value = ""; toggleSettings();
+    
+    document.getElementById('custom-text').value = ""; 
+    toggleSettings();
 }
