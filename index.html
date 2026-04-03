@@ -3,31 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Heinecan</title>
+    <title>Heinecan - Le Jeu</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="home-screen" class="screen">
-        <h1 class="logo-text">HEINECAN</h1>
-        <p class="tagline">Tournez la bouteille, relevez le défi.</p>
-        <button class="btn-main pulse" onclick="showSetup()">Lancer la soirée</button>
+        <h1 class="logo">HEINECAN</h1>
+        <button class="btn-main" onclick="showSetup()">COMMENCER</button>
     </div>
 
     <div id="setup-screen" class="screen hidden">
         <div class="card">
-            <h2>Combien de joueurs ?</h2>
+            <h2>Nombre de joueurs</h2>
             <input type="number" id="player-count" min="1" max="12" value="4">
-            <br>
-            <button class="btn-main" onclick="initPhotoPhase()">Suivant</button>
+            <button class="btn-main" onclick="initPhotoPhase()">SUIVANT</button>
         </div>
     </div>
 
     <div id="photo-screen" class="screen hidden">
-        <h2 id="photo-instruction">Joueur 1 : Photo</h2>
-        <div id="photo-container"><video id="video" autoplay playsinline></video></div>
+        <h2 id="photo-instruction">Joueur 1</h2>
+        <div class="video-wrapper">
+            <video id="video" autoplay playsinline></video>
+            <div class="photo-overlay-id">1</div>
+        </div>
         <div class="gender-btns">
-            <button class="btn-gender male" onclick="savePlayer('H')">♂ Homme</button>
-            <button class="btn-gender female" onclick="savePlayer('F')">♀ Femme</button>
+            <button class="btn-gender" onclick="savePlayer('H')">HOMME</button>
+            <button class="btn-gender" onclick="savePlayer('F')">FEMME</button>
         </div>
         <canvas id="photo-canvas" style="display:none"></canvas>
     </div>
@@ -36,25 +37,25 @@
         <canvas id="main-canvas"></canvas>
         
         <div id="choice-overlay" class="overlay hidden">
-            <h2 id="designated-name">À toi !</h2>
-            <div class="btn-group">
-                <button class="btn-choice action" onclick="pickTask('action')">ACTION ⚡</button>
-                <button class="btn-choice verite" onclick="pickTask('verite')">VÉRITÉ 💡</button>
+            <h2 id="designated-name">À TOI !</h2>
+            <div class="btn-group-row">
+                <button class="btn-choice action" onclick="pickTask('action')">ACTION</button>
+                <button class="btn-choice verite" onclick="pickTask('verite')">VÉRITÉ</button>
             </div>
         </div>
 
         <div id="task-overlay" class="overlay hidden">
-            <div class="active-player-box">
-                <img id="active-player-reminder" src="" alt="Joueur">
-                <div id="active-player-number"></div>
+            <div class="player-identity">
+                <img id="active-player-reminder" src="">
+                <div id="active-player-number">1</div>
             </div>
             <div id="timer-display">30</div>
             <p id="task-text"></p>
             <div id="verdict-buttons" class="hidden">
-                <p>Le joueur a-t-il réussi ?</p>
-                <div class="btn-group-large">
-                    <button class="btn-danger" onclick="endTurn(false)">ÉCHEC 🗑️</button>
-                    <button class="btn-success" onclick="endTurn(true)">RÉUSSI ✔️</button>
+                <p>Défi réussi ?</p>
+                <div class="btn-group-row">
+                    <button class="btn-danger" onclick="endTurn(false)">NON</button>
+                    <button class="btn-success" onclick="endTurn(true)">OUI</button>
                 </div>
             </div>
         </div>
