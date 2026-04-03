@@ -1,20 +1,24 @@
+
 {
-  "name": "Heine-can",
-  "short_name": "Heine-can",
-  "start_url": "./index.html",
-  "display": "standalone",
-  "background_color": "#e6f0e6",
-  "theme_color": "#4c7c4c",
+  "short_name": "Heinecan",
+  "name": "Heinecan - Le Jeu de la Bouteille",
+  "description": "Action ou Vérité immersif avec interaction sociale et gages personnalisables.",
   "icons": [
     {
       "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "sizes": "192x192"
     },
     {
       "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "sizes": "512x512"
     }
-  ]
+  ],
+  "start_url": "./index.html",
+  "background_color": "#0a0a0a",
+  "display": "standalone",
+  "scope": "./",
+  "theme_color": "#008200",
+  "orientation": "landscape"
 }
