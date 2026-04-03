@@ -17,7 +17,8 @@ const defaultDatabase = [
     { text: "Chante un extrait de 'Allumer le feu' pour {X}.", type: "action", interaction: "any" },
     { text: "Quel est ton plus gros secret vis-à-vis de {X} ?", type: "verite", interaction: "any" },
     { text: "Fais une demande en mariage ridicule à {XO}.", type: "action", interaction: "opposite_gender" },
-    { text: "Trouve un objet rouge et pose-le sur ta tête.", type: "action", interaction: "none" }
+    { text: "Trouve un objet rouge et pose-le sur ta tête.", type: "action", interaction: "none" },
+    { text: "Raconte ton dernier rêve étrange à {X}.", type: "verite", interaction: "any" }
 ];
 
 // --- NAVIGATION ---
@@ -30,8 +31,10 @@ async function initPhotoPhase() {
     totalPlayersCount = parseInt(document.getElementById('player-count').value);
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('photo-screen').classList.remove('hidden');
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-    document.getElementById('video').srcObject = stream;
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        document.getElementById('video').srcObject = stream;
+    } catch(e) { alert("Accès caméra refusé."); }
 }
 
 function savePlayer(gender) {
@@ -75,13 +78,12 @@ function render() {
     const radius = Math.min(cx, cy) * 0.7;
 
     activeOnes.forEach((p, i) => {
-        // RÉGLAGE CRUCIAL : L'angle est calculé selon le nombre de joueurs présents
         const angle = i * ((Math.PI * 2) / activeOnes.length);
         const x = cx + radius * Math.cos(angle - Math.PI / 2);
         const y = cy + radius * Math.sin(angle - Math.PI / 2);
         
         if (!isSpinning && designatedPlayerIdx === i) {
-            ctx.shadowBlur = 25; ctx.shadowColor = "#008200";
+            ctx.shadowBlur = 30; ctx.shadowColor = "#008200";
             ctx.strokeStyle = "#008200"; ctx.lineWidth = 6;
             ctx.beginPath(); ctx.arc(x, y, 48, 0, Math.PI * 2); ctx.stroke();
             ctx.shadowBlur = 0;
@@ -95,7 +97,7 @@ function render() {
     ctx.drawImage(bottleImg, -bW/2, -bH/2, bW, bH); ctx.restore();
 }
 
-// --- ROTATION UNIVERSELLE (1, 2, 3... 12 JOUEURS) ---
+// --- ROTATION ORGANIQUE (SENSATION RÉELLE) ---
 canvas.onclick = () => {
     if (isSpinning || !document.getElementById('choice-overlay').classList.contains('hidden')) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -103,39 +105,44 @@ canvas.onclick = () => {
     isSpinning = true;
     const activeOnes = players.filter(p => p.active);
     const nbPlayers = activeOnes.length;
-    
-    // 1. Choix du gagnant (0 à nbPlayers - 1)
+    const sliceAngle = (Math.PI * 2) / nbPlayers;
+
+    // Prédire le gagnant
     designatedPlayerIdx = Math.floor(Math.random() * nbPlayers);
 
-    // 2. Calcul de l'angle de départ propre
-    let currentStart = bottleAngle % (Math.PI * 2);
-    
-    // 3. Calcul de la destination (5 tours + angle du joueur)
-    const slice = (Math.PI * 2) / nbPlayers;
-    const target = (Math.PI * 2 * 5) + (designatedPlayerIdx * slice);
+    // Paramètres de sensation
+    const duration = 5000 + (Math.random() * 800); 
+    const nbTours = 6 + Math.floor(Math.random() * 3); 
+    const targetAngle = (nbTours * Math.PI * 2) + (designatedPlayerIdx * sliceAngle);
+    const startAngle = bottleAngle % (Math.PI * 2);
 
     let startTime = null;
-    const duration = 4000;
 
     function animate(currentTime) {
         if (!startTime) startTime = currentTime;
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        // Courbe "Quintic" pour un arrêt extrêmement doux sans rebond
-        const easeOut = 1 - Math.pow(1 - progress, 5);
+        // FORMULE EXPO : Grosse impulsion, puis agonie lente
+        const easeOut = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
         
-        // Progression ABSOLUE : Pas de retour en arrière possible
-        bottleAngle = currentStart + (target - currentStart) * easeOut;
+        // MICRO-VIBRATION : Simule le frottement de la bouteille sur le sol
+        const jitter = (1 - progress) * (Math.sin(elapsed * 0.08) * 0.0015);
+        
+        bottleAngle = startAngle + (targetAngle - startAngle) * easeOut + jitter;
 
         render();
 
         if (progress < 1) {
             requestAnimationFrame(animate);
         } else {
-            isSpinning = false;
-            bottleAngle = bottleAngle % (Math.PI * 2);
-            showChoiceMenu();
+            // Temps de pause pour valider l'arrêt visuel
+            setTimeout(() => {
+                isSpinning = false;
+                bottleAngle = targetAngle % (Math.PI * 2);
+                render();
+                showChoiceMenu();
+            }, 200);
         }
     }
     requestAnimationFrame(animate);
@@ -184,7 +191,7 @@ function endTurn(success) {
     if (!success) {
         const activeOnes = players.filter(p => p.active);
         activeOnes[designatedPlayerIdx].active = false;
-        if (players.filter(p => p.active).length < 2) { alert("Fin de partie !"); location.reload(); }
+        if (players.filter(p => p.active).length < 2) { alert("Partie terminée !"); location.reload(); }
     }
     designatedPlayerIdx = null; render();
 }
